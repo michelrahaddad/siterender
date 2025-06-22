@@ -73,12 +73,3 @@ export const insertPlanSchema = createInsertSchema(plans);
 export const insertSubscriptionSchema = createInsertSchema(subscriptions);
 export const insertPaymentSchema = createInsertSchema(payments);
 
-export {
-  users,
-  customers,
-  plans,
-  subscriptions,
-  payments,
-  leads,
-  whatsappConversions
-};
