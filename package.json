@@ -15,7 +15,7 @@
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc --noEmit",
     "db:push": "drizzle-kit push",
-    "render-build": "npm ci --include=dev && npm run build",
+    "render-build": "npm install && npm run build",
     "render-start": "npm run start",
     "postinstall": "npm run check",
     "test:build": "node scripts/test-build.js",
