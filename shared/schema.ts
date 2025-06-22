@@ -10,14 +10,13 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Tabela de usuários do sistema
+// Tabelas principais
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
 });
 
-// Tabela de administradores (adminUsers)
 export const adminUsers = pgTable("admin_users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -25,7 +24,6 @@ export const adminUsers = pgTable("admin_users", {
   password: text("password").notNull(),
 });
 
-// Clientes
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -35,18 +33,16 @@ export const customers = pgTable("customers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Planos disponíveis
 export const plans = pgTable("plans", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  type: text("type").notNull(), // 'individual', 'familiar', 'empresarial'
+  type: text("type").notNull(), // individual, familiar, empresarial
   annualPrice: decimal("annual_price", { precision: 10, scale: 2 }).notNull(),
   monthlyPrice: decimal("monthly_price", { precision: 10, scale: 2 }).notNull(),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Assinaturas ativas dos clientes
 export const subscriptions = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull().references(() => customers.id),
@@ -56,16 +52,14 @@ export const subscriptions = pgTable("subscriptions", {
   isActive: boolean("is_active").default(true),
 });
 
-// Pagamentos
 export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
   subscriptionId: integer("subscription_id").notNull().references(() => subscriptions.id),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   paidAt: timestamp("paid_at").defaultNow(),
-  method: text("method").notNull(), // 'pix', 'credit_card', etc.
+  method: text("method").notNull(),
 });
 
-// Leads
 export const leads = pgTable("leads", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -74,7 +68,6 @@ export const leads = pgTable("leads", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Conversões pelo WhatsApp
 export const whatsappConversions = pgTable("whatsapp_conversions", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -83,7 +76,6 @@ export const whatsappConversions = pgTable("whatsapp_conversions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Cartões digitais vinculados à assinatura
 export const digitalCards = pgTable("digital_cards", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull().references(() => customers.id),
@@ -91,7 +83,7 @@ export const digitalCards = pgTable("digital_cards", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Zod Schemas
+// Zod schemas
 export const insertLeadSchema = createInsertSchema(leads, {
   name: z.string().min(1),
   email: z.string().email(),
@@ -102,15 +94,3 @@ export const insertCustomerSchema = createInsertSchema(customers);
 export const insertPlanSchema = createInsertSchema(plans);
 export const insertSubscriptionSchema = createInsertSchema(subscriptions);
 export const insertPaymentSchema = createInsertSchema(payments);
-
-// Exportações únicas e corretas
-export {
-  users,
-  adminUsers,
-  customers,
-  subscriptions,
-  digitalCards,
-  plans,
-  whatsappConversions,
-  leads,
-};
