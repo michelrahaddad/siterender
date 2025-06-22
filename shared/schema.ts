@@ -1,4 +1,3 @@
-
 import {
   pgTable,
   text,
@@ -104,7 +103,7 @@ export const insertPlanSchema = createInsertSchema(plans);
 export const insertSubscriptionSchema = createInsertSchema(subscriptions);
 export const insertPaymentSchema = createInsertSchema(payments);
 
-// Exportações
+// Exportações únicas e corretas
 export {
   users,
   adminUsers,
