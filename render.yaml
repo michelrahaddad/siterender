@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: cartao-vidah
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm run render-build
+    startCommand: npm run render-start
+    healthCheckPath: /health
+    autoDeploy: false
+    disk:
+      name: cartao-vidah-disk
+      mountPath: /opt/render/project/logs
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NPM_CONFIG_PRODUCTION
+        value: false
+    scaling:
+      minInstances: 1
+      maxInstances: 3
+    dockerCommand: null
+    dockerContext: null
+    dockerfilePath: null

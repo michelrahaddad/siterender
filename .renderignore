@@ -1,0 +1,22 @@
+# Render ignore file
+.git/
+.gitignore
+.env
+.env.*
+node_modules/
+dist/
+logs/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.zip
+*.tar.gz
+client/client/
+scripts/test-*.js
+scripts/simulation*.js
+attached_assets/
+render-final-*/
+cartao-vidah-*/
