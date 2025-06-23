@@ -1,6 +1,11 @@
 import rateLimit from 'express-rate-limit';
 import { RATE_LIMITS } from '@shared/constants';
 
+// Garante que IP real seja usado mesmo com 'trust proxy'
+const customKeyGenerator = (req: any) => {
+  return req.headers['x-forwarded-for']?.toString() || req.ip;
+};
+
 /**
  * General rate limiter for all requests
  */
@@ -10,6 +15,7 @@ export const generalLimiter = rateLimit({
   message: { error: 'Muitas requisições. Tente novamente em alguns minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: customKeyGenerator,
 });
 
 /**
@@ -21,6 +27,7 @@ export const apiLimiter = rateLimit({
   message: { error: 'Limite de requisições da API excedido. Tente novamente em alguns minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: customKeyGenerator,
 });
 
 /**
@@ -32,6 +39,7 @@ export const whatsappLimiter = rateLimit({
   message: { error: 'Muitas solicitações WhatsApp. Aguarde alguns minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: customKeyGenerator,
 });
 
 /**
@@ -43,6 +51,7 @@ export const loginLimiter = rateLimit({
   message: { error: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: customKeyGenerator,
 });
 
 /**
@@ -54,4 +63,5 @@ export const adminLimiter = rateLimit({
   message: { error: 'Limite de requisições administrativas excedido.' },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: customKeyGenerator,
 });
