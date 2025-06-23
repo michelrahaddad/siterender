@@ -1,14 +1,7 @@
 import { customers, subscriptions, digitalCards, plans, adminUsers, whatsappConversions, type Customer, type InsertCustomer, type Subscription, type InsertSubscription, type DigitalCard, type InsertDigitalCard, type Plan, users, type User, type InsertUser, type AdminUser, type InsertAdminUser, type WhatsappConversion, type InsertWhatsappConversion } from "@shared/schema";
-import { db } from "./db";
-import { Pool } from 'pg';
+import { db, pool } from "./db";
 import { eq, and, gte, lte } from "drizzle-orm";
 import bcrypt from "bcrypt";
-
-// Create dedicated pool for direct PostgreSQL operations
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
