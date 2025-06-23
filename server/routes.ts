@@ -12,23 +12,23 @@ import { sanitizeInput } from "./security";
 import { formatAdminResponse } from "./middleware/responseFormatter";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  
+
   // Health check endpoint
   app.get("/health", (req, res) => {
-    res.json({ 
-      success: true, 
-      status: "healthy", 
-      timestamp: new Date().toISOString() 
+    res.json({
+      success: true,
+      status: "healthy",
+      timestamp: new Date().toISOString()
     });
   });
 
   // Apply global middleware for API routes
   app.use("/api", sanitizeRequest);
   app.use(formatAdminResponse);
-  
+
   // Plan routes
   app.get("/api/plans", PlanController.getAllPlans);
-  app.get("/api/plans/:id", 
+  app.get("/api/plans/:id",
     [param('id').isInt({ min: 1 }).withMessage('ID do plano deve ser um número inteiro positivo')],
     validateRequest,
     PlanController.getPlanById
@@ -48,14 +48,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     validateRequest,
     SubscriptionController.createSubscription
   );
-  
+
   app.get("/api/subscriptions/:id",
     [param('id').isInt({ min: 1 }).withMessage('ID da assinatura deve ser um número inteiro positivo')],
     validateRequest,
     SubscriptionController.getSubscription
   );
 
-  // WhatsApp conversion routes - validação simplificada
+  // WhatsApp conversion routes
   app.post("/track-whatsapp",
     whatsappLimiter,
     [
@@ -135,7 +135,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     AdminController.login
   );
 
-  app.get("/api/admin/verify", AdminController.verifyToken);
+  // ❌ COMENTADA para evitar erro durante o deploy
+  // app.get("/api/admin/verify", AdminController.verifyToken);
 
   // Protected admin routes
   app.use("/api/admin", adminLimiter);
