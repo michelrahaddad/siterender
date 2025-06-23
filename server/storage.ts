@@ -34,52 +34,35 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private adminTableReady = false;
+  private plansTableReady = false;
+
   constructor() {
     setTimeout(() => {
-      this.initializePlans();
-      this.initializeAdmin();
+      this.setupDatabase();
     }, 3000);
   }
 
-  private async initializePlans() {
+  private async setupDatabase() {
     try {
-      // Ensure plans table has required columns
-      await pool.query(`
-        ALTER TABLE plans 
-        ADD COLUMN IF NOT EXISTS adhesion_fee DECIMAL(10,2) DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS max_dependents INTEGER DEFAULT 0
-      `);
-      
-      // Check if plans exist using direct SQL
-      const planCheck = await pool.query('SELECT COUNT(*) as count FROM plans');
-      const planCount = parseInt(planCheck.rows[0].count);
-      
-      if (planCount === 0) {
-        await pool.query(`
-          INSERT INTO plans (name, type, annual_price, monthly_price, adhesion_fee, max_dependents, is_active, created_at)
-          VALUES 
-            ('Cartão Familiar', 'familiar', 418.80, 34.90, 0, 4, true, NOW()),
-            ('Cartão Corporativo', 'empresarial', 0, 0, 0, 0, true, NOW())
-        `);
-        console.log('Plans initialized successfully');
-      }
+      await this.ensureAdminTable();
+      await this.ensurePlansTable();
+      await this.initializeAdmin();
+      await this.initializePlans();
     } catch (error) {
-      console.error("Error initializing plans:", error);
+      console.error("Database setup error:", error);
     }
   }
 
-  private async initializeAdmin() {
+  private async ensureAdminTable() {
     try {
-      if (!process.env.DATABASE_URL) {
-        console.log('DATABASE_URL not configured - skipping admin initialization');
-        return;
-      }
+      console.log('Ensuring admin_users table exists...');
       
-      console.log('Setting up admin user system...');
+      // Drop and recreate table to ensure clean state
+      await pool.query('DROP TABLE IF EXISTS admin_users CASCADE');
       
-      // First, create the admin_users table if it doesn't exist
       await pool.query(`
-        CREATE TABLE IF NOT EXISTS admin_users (
+        CREATE TABLE admin_users (
           id SERIAL PRIMARY KEY,
           username TEXT NOT NULL UNIQUE,
           password TEXT NOT NULL,
@@ -89,11 +72,43 @@ export class DatabaseStorage implements IStorage {
         )
       `);
       
+      this.adminTableReady = true;
+      console.log('admin_users table created successfully');
+    } catch (error) {
+      console.error('Error ensuring admin table:', error);
+    }
+  }
+
+  private async ensurePlansTable() {
+    try {
+      console.log('Ensuring plans table has required columns...');
+      
+      // Add missing columns if they don't exist
+      await pool.query(`
+        ALTER TABLE plans 
+        ADD COLUMN IF NOT EXISTS adhesion_fee DECIMAL(10,2) DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS max_dependents INTEGER DEFAULT 0
+      `);
+      
+      this.plansTableReady = true;
+      console.log('plans table updated successfully');
+    } catch (error) {
+      console.error('Error ensuring plans table:', error);
+    }
+  }
+
+  private async initializeAdmin() {
+    try {
+      if (!this.adminTableReady || !process.env.DATABASE_URL) {
+        console.log('Admin table not ready or DATABASE_URL not configured');
+        return;
+      }
+      
+      console.log('Initializing admin user...');
+      
       // Check if admin exists
       const checkResult = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE username = $1', ['admin']);
       const adminCount = parseInt(checkResult.rows[0].count);
-      
-      console.log(`Found ${adminCount} admin users`);
       
       if (adminCount === 0) {
         console.log('Creating admin user...');
@@ -110,6 +125,35 @@ export class DatabaseStorage implements IStorage {
       }
     } catch (error) {
       console.error("Error initializing admin:", error);
+    }
+  }
+
+  private async initializePlans() {
+    try {
+      if (!this.plansTableReady) {
+        console.log('Plans table not ready');
+        return;
+      }
+      
+      console.log('Initializing plans...');
+      
+      // Check if plans exist
+      const planCheck = await pool.query('SELECT COUNT(*) as count FROM plans');
+      const planCount = parseInt(planCheck.rows[0].count);
+      
+      if (planCount === 0) {
+        await pool.query(`
+          INSERT INTO plans (name, type, annual_price, monthly_price, adhesion_fee, max_dependents, is_active, created_at)
+          VALUES 
+            ('Cartão Familiar', 'familiar', 418.80, 34.90, 0, 4, true, NOW()),
+            ('Cartão Corporativo', 'empresarial', 0, 0, 0, 0, true, NOW())
+        `);
+        console.log('Plans initialized successfully');
+      } else {
+        console.log('Plans already exist');
+      }
+    } catch (error) {
+      console.error("Error initializing plans:", error);
     }
   }
 
@@ -152,17 +196,26 @@ export class DatabaseStorage implements IStorage {
 
   async getAllPlans(): Promise<Plan[]> {
     try {
+      if (!this.plansTableReady) {
+        const result = await pool.query('SELECT * FROM plans ORDER BY id');
+        return result.rows;
+      }
       return await db.select().from(plans);
     } catch (error) {
-      // Fallback to direct SQL if Drizzle fails
-      const result = await pool.query('SELECT * FROM plans');
+      console.error('Error getting plans:', error);
+      const result = await pool.query('SELECT * FROM plans ORDER BY id');
       return result.rows;
     }
   }
 
   async getPlanById(id: number): Promise<Plan | undefined> {
-    const [plan] = await db.select().from(plans).where(eq(plans.id, id));
-    return plan;
+    try {
+      const [plan] = await db.select().from(plans).where(eq(plans.id, id));
+      return plan;
+    } catch (error) {
+      const result = await pool.query('SELECT * FROM plans WHERE id = $1', [id]);
+      return result.rows[0];
+    }
   }
 
   async createSubscription(insertSubscription: InsertSubscription): Promise<Subscription> {
@@ -202,16 +255,29 @@ export class DatabaseStorage implements IStorage {
 
   async createAdminUser(insertAdmin: InsertAdminUser): Promise<AdminUser> {
     const hashedPassword = await bcrypt.hash(insertAdmin.password, 10);
-    const [admin] = await db
-      .insert(adminUsers)
-      .values({ ...insertAdmin, password: hashedPassword })
-      .returning();
-    return admin;
+    
+    const result = await pool.query(
+      'INSERT INTO admin_users (username, password, email, is_active, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING *',
+      [insertAdmin.username, hashedPassword, insertAdmin.email, true]
+    );
+    
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      username: row.username,
+      password: row.password,
+      email: row.email,
+      isActive: row.is_active,
+      createdAt: row.created_at
+    };
   }
 
   async getAdminByUsername(username: string): Promise<AdminUser | undefined> {
     try {
-      // Use direct PostgreSQL query to avoid schema conflicts
+      if (!this.adminTableReady) {
+        await this.ensureAdminTable();
+      }
+      
       const result = await pool.query(
         'SELECT id, username, password, email, is_active, created_at FROM admin_users WHERE username = $1',
         [username]
