@@ -10,31 +10,38 @@ const JWT_SECRET = process.env.JWT_SECRET || "your-super-secure-secret-key-chang
 export class AdminController {
   static async login(req: Request, res: Response) {
     try {
-      const validatedData = adminLoginSchema.parse(req.body);
+      console.log('Admin login attempt:', req.body);
       
-      console.log(`[Security] Login attempt for username: ${validatedData.username} from IP: ${req.ip}`);
-
-      const isValid = await storage.verifyAdminPassword(validatedData.username, validatedData.password);
+      const { username, password } = req.body;
       
-      if (!isValid) {
-        console.log(`[Security] Failed login attempt for username: ${validatedData.username} from IP: ${req.ip}`);
-        
-        const response: ApiResponse = {
+      if (!username || !password) {
+        return res.status(400).json({
           success: false,
-          error: "Credenciais inválidas"
-        };
-        return res.status(401).json(response);
+          error: "Username e password são obrigatórios"
+        });
       }
 
-      const admin = await storage.getAdminByUsername(validatedData.username);
-      if (!admin || !admin.isActive) {
-        console.log(`[Security] Login attempt for inactive user: ${validatedData.username} from IP: ${req.ip}`);
+      console.log(`[Security] Login attempt for username: ${username} from IP: ${req.ip}`);
+
+      const isValid = await storage.verifyAdminPassword(username, password);
+      
+      if (!isValid) {
+        console.log(`[Security] Failed login attempt for username: ${username} from IP: ${req.ip}`);
         
-        const response: ApiResponse = {
+        return res.status(401).json({
           success: false,
-          error: "Conta não está ativa"
-        };
-        return res.status(401).json(response);
+          error: "Credenciais inválidas"
+        });
+      }
+
+      const admin = await storage.getAdminByUsername(username);
+      if (!admin) {
+        console.log(`[Security] Admin not found: ${username}`);
+        
+        return res.status(401).json({
+          success: false,
+          error: "Usuário não encontrado"
+        });
       }
 
       const token = jwt.sign(
@@ -48,10 +55,10 @@ export class AdminController {
         { algorithm: 'HS256' }
       );
 
-      console.log(`[Security] Successful login for username: ${validatedData.username} from IP: ${req.ip}`);
+      console.log(`[Security] Successful login for username: ${username} from IP: ${req.ip}`);
 
-      // Frontend expects token and user in root level
       res.json({
+        success: true,
         token,
         user: {
           id: admin.id,
@@ -62,21 +69,10 @@ export class AdminController {
     } catch (error) {
       console.error("[AdminController] Login error:", error);
       
-      if (error instanceof z.ZodError) {
-        const response: ApiResponse = {
-          success: false,
-          error: "Dados de login inválidos",
-          message: error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
-        };
-        return res.status(400).json(response);
-      }
-
-      const response: ApiResponse = {
+      res.status(500).json({
         success: false,
         error: "Erro interno do servidor"
-      };
-      
-      res.status(500).json(response);
+      });
     }
   }
 
