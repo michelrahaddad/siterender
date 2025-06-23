@@ -11,6 +11,7 @@ import { generalLimiter } from "./middleware/rateLimiting";
 import { healthCheck, readinessCheck } from "./health";
 import { globalErrorHandler, notFoundHandler } from "./middleware/errorHandling";
 import { performanceMonitoring, getMetricsEndpoint } from "./middleware/monitoring";
+import { securityMiddleware } from "./middleware/security";  // ✅ Adicionada esta linha
 
 const app = express();
 
@@ -73,13 +74,14 @@ app.use(performanceMonitoring);
 app.set('trust proxy', true);
 app.disable('x-powered-by');
 
+// ✅ Middleware de segurança adicionado
+app.use(securityMiddleware);
+
 // Additional security middleware
 app.use(securityHeaders);
 app.use(validateRequestSize);
 app.use(monitorSuspiciousActivity);
 app.use(queryTimeout(30000)); // 30 second timeout
-
-// Rate limiting is now handled in route modules
 
 // Body parsing with security limits
 app.use(express.json({ 
@@ -147,8 +149,6 @@ app.use((req, res, next) => {
   
   // Global error handler
   app.use(globalErrorHandler);
-
-  // Vite setup is already handled above
 
   // Port configuration for Render
   const port = parseInt(process.env.PORT || "10000", 10);
