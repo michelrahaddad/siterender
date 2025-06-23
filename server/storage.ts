@@ -35,8 +35,10 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   constructor() {
-    this.initializePlans();
-    this.initializeAdmin();
+    setTimeout(() => {
+      this.initializePlans();
+      this.initializeAdmin();
+    }, 2000);
   }
 
   private async initializePlans() {
@@ -50,17 +52,15 @@ export class DatabaseStorage implements IStorage {
             annualPrice: "418.80",
             monthlyPrice: "34.90",
             adhesionFee: "0",
-            maxDependents: 4,
-            isActive: true,
+            maxDependents: 4
           },
           {
-            name: "Cartão Corporativo",
+            name: "Cartão Corporativo", 
             type: "empresarial",
             annualPrice: "0",
             monthlyPrice: "0",
             adhesionFee: "0",
-            maxDependents: 0,
-            isActive: true,
+            maxDependents: 0
           }
         ]);
         console.log('Plans initialized successfully');
@@ -73,18 +73,19 @@ export class DatabaseStorage implements IStorage {
   private async initializeAdmin() {
     try {
       if (!process.env.DATABASE_URL) {
-        console.log('DATABASE_URL not configured, skipping admin initialization');
+        console.log('DATABASE_URL not configured');
         return;
       }
       
       const existingAdmin = await db.select().from(adminUsers).where(eq(adminUsers.username, 'admin'));
       if (existingAdmin.length === 0) {
         const hashedPassword = await bcrypt.hash('vidah2025', 10);
+        
+        // Simple insert without isActive field to avoid SQL syntax issues
         await db.insert(adminUsers).values([{
           username: 'admin',
           password: hashedPassword,
-          email: 'admin@cartaovidah.com',
-          isActive: true
+          email: 'admin@cartaovidah.com'
         }]);
         console.log('Admin user created successfully');
       } else {
@@ -133,7 +134,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllPlans(): Promise<Plan[]> {
-    return await db.select().from(plans).where(eq(plans.isActive, true));
+    return await db.select().from(plans);
   }
 
   async getPlanById(id: number): Promise<Plan | undefined> {
@@ -176,7 +177,6 @@ export class DatabaseStorage implements IStorage {
     return card;
   }
 
-  // Admin management methods
   async createAdminUser(insertAdmin: InsertAdminUser): Promise<AdminUser> {
     const hashedPassword = await bcrypt.hash(insertAdmin.password, 10);
     const [admin] = await db
@@ -222,7 +222,6 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // WhatsApp conversion tracking methods
   async createWhatsappConversion(insertConversion: InsertWhatsappConversion): Promise<WhatsappConversion> {
     try {
       console.log('Storage - attempting to save conversion:', insertConversion);
@@ -242,7 +241,6 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error("Storage - database error:", error);
       
-      // Return mock to prevent crash
       const mockConversion: WhatsappConversion = {
         id: `temp_${Date.now()}`,
         name: insertConversion.name || '',
@@ -254,7 +252,7 @@ export class DatabaseStorage implements IStorage {
         createdAt: new Date()
       };
       
-      console.log('Storage - returning mock conversion to prevent crash');
+      console.log('Storage - returning temporary conversion to prevent crash');
       return mockConversion;
     }
   }
