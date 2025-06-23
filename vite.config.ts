@@ -20,12 +20,12 @@ export default defineConfig({
         manualChunks: {
           react: ['react', 'react-dom'],
           ui: ['@radix-ui/react-dialog', '@radix-ui/react-select'],
-          utils: ['clsx', 'tailwind-merge', 'date-fns']
-        }
-      }
-    }
+          utils: ['clsx', 'tailwind-merge', 'date-fns'],
+        },
+      },
+    },
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'wouter', '@tanstack/react-query']
-  }
+    include: ['react', 'react-dom', 'wouter', '@tanstack/react-query'],
+  },
 });
