@@ -43,7 +43,14 @@ export class DatabaseStorage implements IStorage {
 
   private async initializePlans() {
     try {
-      // Use direct SQL to avoid column existence issues
+      // Ensure plans table has required columns
+      await pool.query(`
+        ALTER TABLE plans 
+        ADD COLUMN IF NOT EXISTS adhesion_fee DECIMAL(10,2) DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS max_dependents INTEGER DEFAULT 0
+      `);
+      
+      // Check if plans exist using direct SQL
       const planCheck = await pool.query('SELECT COUNT(*) as count FROM plans');
       const planCount = parseInt(planCheck.rows[0].count);
       
@@ -68,9 +75,9 @@ export class DatabaseStorage implements IStorage {
         return;
       }
       
-      console.log('Checking for existing admin user...');
+      console.log('Setting up admin user system...');
       
-      // Create admin_users table if it doesn't exist
+      // First, create the admin_users table if it doesn't exist
       await pool.query(`
         CREATE TABLE IF NOT EXISTS admin_users (
           id SERIAL PRIMARY KEY,
@@ -92,7 +99,6 @@ export class DatabaseStorage implements IStorage {
         console.log('Creating admin user...');
         const hashedPassword = await bcrypt.hash('vidah2025', 10);
         
-        // Direct PostgreSQL insert
         await pool.query(
           'INSERT INTO admin_users (username, password, email, is_active, created_at) VALUES ($1, $2, $3, $4, NOW())',
           ['admin', hashedPassword, 'admin@cartaovidah.com', true]
