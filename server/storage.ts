@@ -1,6 +1,6 @@
 import { customers, subscriptions, digitalCards, plans, adminUsers, whatsappConversions, type Customer, type InsertCustomer, type Subscription, type InsertSubscription, type DigitalCard, type InsertDigitalCard, type Plan, users, type User, type InsertUser, type AdminUser, type InsertAdminUser, type WhatsappConversion, type InsertWhatsappConversion } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
@@ -38,7 +38,7 @@ export class DatabaseStorage implements IStorage {
     setTimeout(() => {
       this.initializePlans();
       this.initializeAdmin();
-    }, 2000);
+    }, 3000);
   }
 
   private async initializePlans() {
@@ -73,26 +73,37 @@ export class DatabaseStorage implements IStorage {
   private async initializeAdmin() {
     try {
       if (!process.env.DATABASE_URL) {
-        console.log('DATABASE_URL not configured');
+        console.log('DATABASE_URL not configured - skipping admin initialization');
         return;
       }
       
-      const existingAdmin = await db.select().from(adminUsers).where(eq(adminUsers.username, 'admin'));
-      if (existingAdmin.length === 0) {
+      console.log('Checking for existing admin user...');
+      
+      // Use raw SQL to check if admin exists
+      const checkResult = await db.execute(sql`
+        SELECT COUNT(*) as count FROM admin_users WHERE username = 'admin'
+      `);
+      
+      const adminCount = Number(checkResult.rows[0]?.count || 0);
+      console.log(`Found ${adminCount} admin users`);
+      
+      if (adminCount === 0) {
+        console.log('Creating admin user...');
         const hashedPassword = await bcrypt.hash('vidah2025', 10);
         
-        // Simple insert without isActive field to avoid SQL syntax issues
-        await db.insert(adminUsers).values([{
-          username: 'admin',
-          password: hashedPassword,
-          email: 'admin@cartaovidah.com'
-        }]);
-        console.log('Admin user created successfully');
+        // Use raw SQL to insert admin - completely bypassing Drizzle defaults
+        await db.execute(sql`
+          INSERT INTO admin_users (username, password, email, is_active, created_at) 
+          VALUES ('admin', ${hashedPassword}, 'admin@cartaovidah.com', true, NOW())
+        `);
+        
+        console.log('Admin user created successfully with raw SQL');
       } else {
         console.log('Admin user already exists');
       }
     } catch (error) {
       console.error("Error initializing admin:", error);
+      // Don't crash the app if admin creation fails
     }
   }
 
@@ -241,14 +252,17 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error("Storage - database error:", error);
       
+      // Return fallback conversion to prevent crash
       const mockConversion: WhatsappConversion = {
-        id: `temp_${Date.now()}`,
+        id: Date.now(),
         name: insertConversion.name || '',
         phone: insertConversion.phone || '',
         email: insertConversion.email || '',
         buttonType: insertConversion.buttonType,
         planName: insertConversion.planName || null,
         doctorName: insertConversion.doctorName || null,
+        ipAddress: insertConversion.ipAddress || null,
+        userAgent: insertConversion.userAgent || null,
         createdAt: new Date()
       };
       
