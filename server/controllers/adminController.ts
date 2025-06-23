@@ -1,9 +1,7 @@
 import type { Request, Response } from "express";
 import { storage } from "../storage";
-import { adminLoginSchema } from "@shared/validation";
 import { ApiResponse, UnauthorizedError } from "@shared/types";
 import jwt from "jsonwebtoken";
-import { z } from "zod";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secure-secret-key-change-in-production";
 
