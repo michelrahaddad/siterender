@@ -1,7 +1,14 @@
 import { customers, subscriptions, digitalCards, plans, adminUsers, whatsappConversions, type Customer, type InsertCustomer, type Subscription, type InsertSubscription, type DigitalCard, type InsertDigitalCard, type Plan, users, type User, type InsertUser, type AdminUser, type InsertAdminUser, type WhatsappConversion, type InsertWhatsappConversion } from "@shared/schema";
-import { db, pool } from "./db";
+import { db } from "./db";
+import { Pool } from 'pg';
 import { eq, and, gte, lte } from "drizzle-orm";
 import bcrypt from "bcrypt";
+
+// Create dedicated pool for direct PostgreSQL operations
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -34,36 +41,24 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  private adminTableReady = false;
-  private plansTableReady = false;
+  private initialized = false;
 
   constructor() {
-    setTimeout(() => {
-      this.setupDatabase();
-    }, 3000);
+    // Initialize database setup in background
+    this.initializeDatabase();
   }
 
-  private async setupDatabase() {
-    try {
-      await this.ensureAdminTable();
-      await this.ensurePlansTable();
-      await this.ensureWhatsappTable();
-      await this.initializeAdmin();
-      await this.initializePlans();
-    } catch (error) {
-      console.error("Database setup error:", error);
+  private async initializeDatabase() {
+    if (this.initialized || !process.env.DATABASE_URL) {
+      return;
     }
-  }
 
-  private async ensureAdminTable() {
     try {
-      console.log('Ensuring admin_users table exists...');
+      console.log('Initializing database...');
       
-      // Drop and recreate table to ensure clean state
-      await pool.query('DROP TABLE IF EXISTS admin_users CASCADE');
-      
+      // Create admin_users table
       await pool.query(`
-        CREATE TABLE admin_users (
+        CREATE TABLE IF NOT EXISTS admin_users (
           id SERIAL PRIMARY KEY,
           username TEXT NOT NULL UNIQUE,
           password TEXT NOT NULL,
@@ -72,37 +67,15 @@ export class DatabaseStorage implements IStorage {
           created_at TIMESTAMP DEFAULT NOW() NOT NULL
         )
       `);
-      
-      this.adminTableReady = true;
-      console.log('admin_users table created successfully');
-    } catch (error) {
-      console.error('Error ensuring admin table:', error);
-    }
-  }
 
-  private async ensurePlansTable() {
-    try {
-      console.log('Ensuring plans table has required columns...');
-      
-      // Add missing columns if they don't exist
+      // Add missing columns to plans table
       await pool.query(`
         ALTER TABLE plans 
         ADD COLUMN IF NOT EXISTS adhesion_fee DECIMAL(10,2) DEFAULT 0,
         ADD COLUMN IF NOT EXISTS max_dependents INTEGER DEFAULT 0
       `);
-      
-      this.plansTableReady = true;
-      console.log('plans table updated successfully');
-    } catch (error) {
-      console.error('Error ensuring plans table:', error);
-    }
-  }
 
-  private async ensureWhatsappTable() {
-    try {
-      console.log('Ensuring whatsapp_conversions table has required columns...');
-      
-      // Add missing columns if they don't exist
+      // Add missing columns to whatsapp_conversions table
       await pool.query(`
         ALTER TABLE whatsapp_conversions 
         ADD COLUMN IF NOT EXISTS button_type TEXT NOT NULL DEFAULT 'plan_subscription',
@@ -111,54 +84,21 @@ export class DatabaseStorage implements IStorage {
         ADD COLUMN IF NOT EXISTS ip_address TEXT,
         ADD COLUMN IF NOT EXISTS user_agent TEXT
       `);
-      
-      console.log('whatsapp_conversions table updated successfully');
-    } catch (error) {
-      console.error('Error ensuring whatsapp table:', error);
-    }
-  }
 
-  private async initializeAdmin() {
-    try {
-      if (!this.adminTableReady || !process.env.DATABASE_URL) {
-        console.log('Admin table not ready or DATABASE_URL not configured');
-        return;
-      }
-      
-      console.log('Initializing admin user...');
-      
-      // Check if admin exists
-      const checkResult = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE username = $1', ['admin']);
-      const adminCount = parseInt(checkResult.rows[0].count);
+      // Create admin user if not exists
+      const adminCheck = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE username = $1', ['admin']);
+      const adminCount = parseInt(adminCheck.rows[0].count);
       
       if (adminCount === 0) {
-        console.log('Creating admin user...');
         const hashedPassword = await bcrypt.hash('vidah2025', 10);
-        
         await pool.query(
           'INSERT INTO admin_users (username, password, email, is_active, created_at) VALUES ($1, $2, $3, $4, NOW())',
           ['admin', hashedPassword, 'admin@cartaovidah.com', true]
         );
-        
         console.log('Admin user created successfully');
-      } else {
-        console.log('Admin user already exists');
       }
-    } catch (error) {
-      console.error("Error initializing admin:", error);
-    }
-  }
 
-  private async initializePlans() {
-    try {
-      if (!this.plansTableReady) {
-        console.log('Plans table not ready');
-        return;
-      }
-      
-      console.log('Initializing plans...');
-      
-      // Check if plans exist
+      // Initialize plans if not exists
       const planCheck = await pool.query('SELECT COUNT(*) as count FROM plans');
       const planCount = parseInt(planCheck.rows[0].count);
       
@@ -170,11 +110,12 @@ export class DatabaseStorage implements IStorage {
             ('Cartão Corporativo', 'empresarial', 0, 0, 0, 0, true, NOW())
         `);
         console.log('Plans initialized successfully');
-      } else {
-        console.log('Plans already exist');
       }
+
+      this.initialized = true;
+      console.log('Database initialization completed');
     } catch (error) {
-      console.error("Error initializing plans:", error);
+      console.error('Database initialization error:', error);
     }
   }
 
@@ -217,13 +158,9 @@ export class DatabaseStorage implements IStorage {
 
   async getAllPlans(): Promise<Plan[]> {
     try {
-      if (!this.plansTableReady) {
-        const result = await pool.query('SELECT * FROM plans ORDER BY id');
-        return result.rows;
-      }
       return await db.select().from(plans);
     } catch (error) {
-      console.error('Error getting plans:', error);
+      // Fallback to direct SQL
       const result = await pool.query('SELECT * FROM plans ORDER BY id');
       return result.rows;
     }
@@ -295,10 +232,6 @@ export class DatabaseStorage implements IStorage {
 
   async getAdminByUsername(username: string): Promise<AdminUser | undefined> {
     try {
-      if (!this.adminTableReady) {
-        await this.ensureAdminTable();
-      }
-      
       const result = await pool.query(
         'SELECT id, username, password, email, is_active, created_at FROM admin_users WHERE username = $1',
         [username]
@@ -323,8 +256,6 @@ export class DatabaseStorage implements IStorage {
 
   async verifyAdminPassword(username: string, password: string): Promise<boolean> {
     try {
-      console.log('Verifying admin password for username:', username);
-      
       if (!process.env.DATABASE_URL) {
         console.error('DATABASE_URL not configured');
         return false;
@@ -336,10 +267,7 @@ export class DatabaseStorage implements IStorage {
         return false;
       }
       
-      console.log('Admin found, comparing password...');
       const isValid = await bcrypt.compare(password, admin.password);
-      console.log('Password verification result:', isValid);
-      
       return isValid;
     } catch (error) {
       console.error("Error verifying admin password:", error);
@@ -349,14 +277,10 @@ export class DatabaseStorage implements IStorage {
 
   async createWhatsappConversion(insertConversion: InsertWhatsappConversion): Promise<WhatsappConversion> {
     try {
-      console.log('Storage - attempting to save conversion:', insertConversion);
-      
       if (!process.env.DATABASE_URL) {
-        console.error('DATABASE_URL not configured');
         throw new Error('Database not configured');
       }
       
-      // Use direct PostgreSQL query to avoid Drizzle schema conflicts
       const result = await pool.query(`
         INSERT INTO whatsapp_conversions (name, phone, email, button_type, plan_name, doctor_name, ip_address, user_agent, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
@@ -373,7 +297,7 @@ export class DatabaseStorage implements IStorage {
       ]);
       
       const row = result.rows[0];
-      const conversion: WhatsappConversion = {
+      return {
         id: row.id,
         name: row.name,
         phone: row.phone,
@@ -385,34 +309,14 @@ export class DatabaseStorage implements IStorage {
         userAgent: row.user_agent,
         createdAt: row.created_at
       };
-      
-      console.log('Storage - conversion saved successfully');
-      return conversion;
     } catch (error) {
       console.error("Storage - database error:", error);
-      
-      // Return fallback conversion to prevent crash
-      const mockConversion: WhatsappConversion = {
-        id: Date.now(),
-        name: insertConversion.name || '',
-        phone: insertConversion.phone || '',
-        email: insertConversion.email || '',
-        buttonType: insertConversion.buttonType,
-        planName: insertConversion.planName || null,
-        doctorName: insertConversion.doctorName || null,
-        ipAddress: insertConversion.ipAddress || null,
-        userAgent: insertConversion.userAgent || null,
-        createdAt: new Date()
-      };
-      
-      console.log('Storage - returning temporary conversion to prevent crash');
-      return mockConversion;
+      throw error;
     }
   }
 
   async getAllWhatsappConversions(): Promise<WhatsappConversion[]> {
     try {
-      // Use direct PostgreSQL query to avoid Drizzle schema conflicts
       const result = await pool.query(`
         SELECT id, name, phone, email, button_type, plan_name, doctor_name, ip_address, user_agent, created_at
         FROM whatsapp_conversions 
@@ -439,7 +343,6 @@ export class DatabaseStorage implements IStorage {
 
   async getWhatsappConversionsByDateRange(startDate: Date, endDate: Date): Promise<WhatsappConversion[]> {
     try {
-      // Use direct PostgreSQL query to avoid Drizzle schema conflicts
       const result = await pool.query(`
         SELECT id, name, phone, email, button_type, plan_name, doctor_name, ip_address, user_agent, created_at
         FROM whatsapp_conversions 
