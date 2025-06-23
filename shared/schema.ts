@@ -83,7 +83,7 @@ export const digitalCards = pgTable("digital_cards", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Zod schemas
+// ✅ Schemas com Zod
 export const insertLeadSchema = createInsertSchema(leads, {
   name: z.string().min(1),
   email: z.string().email(),
@@ -94,3 +94,6 @@ export const insertCustomerSchema = createInsertSchema(customers);
 export const insertPlanSchema = createInsertSchema(plans);
 export const insertSubscriptionSchema = createInsertSchema(subscriptions);
 export const insertPaymentSchema = createInsertSchema(payments);
+export const insertDigitalCardSchema = createInsertSchema(digitalCards); // ✅ ADICIONADO
+export const insertAdminUserSchema = createInsertSchema(adminUsers);
+export const insertWhatsappConversionSchema = createInsertSchema(whatsappConversions);
