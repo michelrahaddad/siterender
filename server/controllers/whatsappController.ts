@@ -5,7 +5,7 @@ import { ApiResponse, WhatsAppConversion } from "@shared/types";
 import { HTTP_STATUS } from "@shared/constants";
 import { WhatsAppService } from "../services/whatsappService";
 import { z } from "zod";
-import { log } from "../core/vite"; // ✅ Caminho corrigido
+import { log } from "../vite"; // ✅ Caminho corrigido
 
 export class WhatsAppController {
   static async createConversion(req: Request, res: Response) {
