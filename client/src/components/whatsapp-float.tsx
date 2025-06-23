@@ -4,14 +4,18 @@ import { openWhatsApp } from "@/lib/device-detection";
 
 export default function WhatsAppFloat() {
   const handleWhatsAppClick = () => {
-    // ✅ Corrigido: 'name' incluído
-    trackWhatsAppConversion({
+    const trackingData = {
       buttonType: 'plan_subscription',
-      name: 'Usuário não identificado', // ou pegue do contexto se tiver login
-      phone: '16999999999', // opcional
-      email: 'usuario@email.com', // opcional
+      name: 'Usuário não identificado',
+      phone: '16999999999',
+      email: 'usuario@email.com',
       planName: 'Consulta Geral'
-    });
+    };
+
+    // Log para depuração
+    console.log("🔍 Enviando dados para trackWhatsAppConversion:", trackingData);
+
+    trackWhatsAppConversion(trackingData);
 
     const message = "Olá! Gostaria de saber mais sobre o Cartão + Vidah";
     openWhatsApp('5516993247676', message);
@@ -35,3 +39,4 @@ export default function WhatsAppFloat() {
     </div>
   );
 }
+
