@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { storage } from "../storage";
-import { ApiResponse, UnauthorizedError } from "@shared/types";
+import { ApiResponse } from "@shared/types";
 import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secure-secret-key-change-in-production";
@@ -47,128 +47,151 @@ export class AdminController {
           id: admin.id, 
           username: admin.username,
           iat: Math.floor(Date.now() / 1000),
-          exp: Math.floor(Date.now() / 1000) + (2 * 60 * 60) // 2 hours
+          exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
         },
-        JWT_SECRET,
-        { algorithm: 'HS256' }
+        JWT_SECRET
       );
 
       console.log(`[Security] Successful login for username: ${username} from IP: ${req.ip}`);
 
-      res.json({
-        success: true,
-        token,
-        user: {
-          id: admin.id,
-          username: admin.username,
-          email: admin.email
-        }
-      });
-    } catch (error) {
-      console.error("[AdminController] Login error:", error);
-      
-      res.status(500).json({
-        success: false,
-        error: "Erro interno do servidor"
-      });
-    }
-  }
-
-  static async verifyToken(req: Request, res: Response) {
-    try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        throw new UnauthorizedError("Token de acesso inválido");
-      }
-
-      const token = authHeader.split(' ')[1];
-      const decoded = jwt.verify(token, JWT_SECRET) as any;
-      
-      if (!decoded.id || !decoded.username) {
-        throw new UnauthorizedError("Token inválido");
-      }
-      
-      if (decoded.exp && Date.now() >= decoded.exp * 1000) {
-        throw new UnauthorizedError("Token expirado");
-      }
-
-      const admin = await storage.getAdminByUsername(decoded.username);
-      if (!admin || !admin.isActive) {
-        throw new UnauthorizedError("Usuário não autorizado");
-      }
-
       const response: ApiResponse = {
         success: true,
         data: {
+          token,
           admin: {
             id: admin.id,
             username: admin.username,
-            email: admin.email,
-            isActive: admin.isActive
+            email: admin.email
           }
         }
       };
 
       res.json(response);
     } catch (error) {
-      console.error("[AdminController] Token verification error:", error);
-      
-      if (error instanceof UnauthorizedError) {
-        const response: ApiResponse = {
-          success: false,
-          error: error.message
-        };
-        return res.status(401).json(response);
-      }
-
-      const response: ApiResponse = {
-        success: false,
-        error: "Erro de autenticação"
-      };
-      
-      res.status(401).json(response);
-    }
-  }
-
-  static async getDashboardStats(req: Request, res: Response) {
-    try {
-      const conversions = await storage.getAllWhatsappConversions();
-      
-      const today = new Date();
-      const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const lastMonth = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-      
-      const stats = {
-        total: conversions.length,
-        today: conversions.filter(c => c.createdAt && new Date(c.createdAt).toDateString() === today.toDateString()).length,
-        thisWeek: conversions.filter(c => c.createdAt && new Date(c.createdAt) >= lastWeek).length,
-        thisMonth: conversions.filter(c => c.createdAt && new Date(c.createdAt) >= lastMonth).length,
-        byType: {
-          plan_subscription: conversions.filter(c => c.buttonType === 'plan_subscription').length,
-          doctor_appointment: conversions.filter(c => c.buttonType === 'doctor_appointment').length,
-          enterprise_quote: conversions.filter(c => c.buttonType === 'enterprise_quote').length,
-        },
-        recentConversions: conversions
-          .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
-          .slice(0, 10)
-      };
-
-      const response: ApiResponse = {
-        success: true,
-        data: stats
-      };
-
-      res.json(response);
-    } catch (error) {
-      console.error("[AdminController] Dashboard stats error:", error);
+      console.error("[AdminController] Login error:", error);
       
       const response: ApiResponse = {
         success: false,
-        error: "Erro ao buscar estatísticas"
+        error: "Erro interno do servidor"
       };
       
       res.status(500).json(response);
     }
+  }
+
+  static async getConversions(req: Request, res: Response) {
+    try {
+      const conversions = await storage.getAllWhatsappConversions();
+      
+      const response: ApiResponse = {
+        success: true,
+        data: conversions
+      };
+      
+      res.json(response);
+    } catch (error) {
+      console.error("[AdminController] Error getting conversions:", error);
+      
+      const response: ApiResponse = {
+        success: false,
+        error: "Erro ao buscar conversões"
+      };
+      
+      res.status(500).json(response);
+    }
+  }
+
+  static async exportConversions(req: Request, res: Response) {
+    try {
+      const { startDate, endDate, format = 'csv' } = req.query;
+      
+      let conversions;
+      if (startDate && endDate) {
+        conversions = await storage.getWhatsappConversionsByDateRange(
+          new Date(startDate as string),
+          new Date(endDate as string)
+        );
+      } else {
+        conversions = await storage.getAllWhatsappConversions();
+      }
+
+      if (format === 'csv') {
+        const csv = AdminController.convertToCSV(conversions);
+        
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="conversions.csv"');
+        res.send(csv);
+      } else {
+        const response: ApiResponse = {
+          success: true,
+          data: conversions
+        };
+        res.json(response);
+      }
+    } catch (error) {
+      console.error("[AdminController] Error exporting conversions:", error);
+      
+      const response: ApiResponse = {
+        success: false,
+        error: "Erro ao exportar conversões"
+      };
+      
+      res.status(500).json(response);
+    }
+  }
+
+  static async getDashboard(req: Request, res: Response) {
+    try {
+      const conversions = await storage.getAllWhatsappConversions();
+      
+      const stats = {
+        totalConversions: conversions.length,
+        planSubscriptions: conversions.filter(c => c.buttonType === 'plan_subscription').length,
+        doctorConsultations: conversions.filter(c => c.buttonType === 'doctor_consultation').length,
+        corporateQuotes: conversions.filter(c => c.buttonType === 'corporate_quote').length
+      };
+      
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          stats,
+          conversions: conversions.slice(0, 10) // Latest 10 conversions
+        }
+      };
+      
+      res.json(response);
+    } catch (error) {
+      console.error("[AdminController] Error getting dashboard:", error);
+      
+      const response: ApiResponse = {
+        success: false,
+        error: "Erro ao buscar dashboard"
+      };
+      
+      res.status(500).json(response);
+    }
+  }
+
+  private static convertToCSV(conversions: any[]): string {
+    if (conversions.length === 0) {
+      return 'Email,Phone,First_Name,Last_Name,Interest_Category,Campaign_Type\n';
+    }
+
+    const headers = 'Email,Phone,First_Name,Last_Name,Interest_Category,Campaign_Type\n';
+    
+    const rows = conversions.map(conversion => {
+      const [firstName, ...lastNameParts] = (conversion.name || '').split(' ');
+      const lastName = lastNameParts.join(' ');
+      const cleanPhone = (conversion.phone || '').replace(/\D/g, '');
+      
+      const interestCategory = conversion.planName || conversion.doctorName || 'Geral';
+      const campaignType = conversion.buttonType === 'plan_subscription' ? 'Planos' :
+                          conversion.buttonType === 'doctor_consultation' ? 'Consultas' :
+                          'Corporativo';
+      
+      return `"${conversion.email || ''}","${cleanPhone}","${firstName || ''}","${lastName}","${interestCategory}","${campaignType}"`;
+    });
+
+    return headers + rows.join('\n');
   }
 }
