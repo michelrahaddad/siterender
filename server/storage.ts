@@ -36,6 +36,7 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   constructor() {
     this.initializePlans();
+    this.initializeAdmin();
   }
 
   private async initializePlans() {
@@ -67,6 +68,31 @@ export class DatabaseStorage implements IStorage {
       }
     } catch (error) {
       console.error("Error initializing plans:", error);
+    }
+  }
+
+  private async initializeAdmin() {
+    try {
+      if (!process.env.DATABASE_URL) {
+        console.log('DATABASE_URL not configured, skipping admin initialization');
+        return;
+      }
+      
+      const existingAdmin = await db.select().from(adminUsers).where(eq(adminUsers.username, 'admin'));
+      if (existingAdmin.length === 0) {
+        const hashedPassword = await bcrypt.hash('vidah2025', 10);
+        await db.insert(adminUsers).values({
+          username: 'admin',
+          password: hashedPassword,
+          email: 'admin@cartaovidah.com',
+          isActive: true
+        });
+        console.log('Admin user created successfully');
+      } else {
+        console.log('Admin user already exists');
+      }
+    } catch (error) {
+      console.error("Error initializing admin:", error);
     }
   }
 
@@ -167,37 +193,52 @@ export class DatabaseStorage implements IStorage {
   }
 
   async verifyAdminPassword(username: string, password: string): Promise<boolean> {
-    const admin = await this.getAdminByUsername(username);
-    if (!admin) return false;
-    return await bcrypt.compare(password, admin.password);
+    try {
+      console.log('Verifying admin password for username:', username);
+      
+      if (!process.env.DATABASE_URL) {
+        console.error('DATABASE_URL not configured');
+        return false;
+      }
+      
+      const admin = await this.getAdminByUsername(username);
+      if (!admin) {
+        console.log('Admin not found in database');
+        return false;
+      }
+      
+      console.log('Admin found, comparing password...');
+      const isValid = await bcrypt.compare(password, admin.password);
+      console.log('Password verification result:', isValid);
+      
+      return isValid;
+    } catch (error) {
+      console.error("Error verifying admin password:", error);
+      return false;
+    }
   }
 
   // WhatsApp conversion tracking methods
   async createWhatsappConversion(insertConversion: InsertWhatsappConversion): Promise<WhatsappConversion> {
     try {
-      console.log('Attempting to save WhatsApp conversion:', {
-        name: insertConversion.name,
-        buttonType: insertConversion.buttonType,
-        planName: insertConversion.planName
-      });
+      console.log('Storage - attempting to save conversion:', insertConversion);
       
       if (!process.env.DATABASE_URL) {
         console.error('DATABASE_URL not configured');
         throw new Error('Database not configured');
       }
       
-      console.log('Database URL configured, attempting insert...');
       const [conversion] = await db
         .insert(whatsappConversions)
         .values(insertConversion)
         .returning();
       
-      console.log('WhatsApp conversion saved successfully:', conversion.id);
+      console.log('Storage - conversion saved successfully');
       return conversion;
     } catch (error) {
-      console.error("Database error creating WhatsApp conversion:", error);
+      console.error("Storage - database error:", error);
       
-      // Create a fallback response to prevent app crash
+      // Return mock to prevent crash
       const mockConversion: WhatsappConversion = {
         id: `temp_${Date.now()}`,
         name: insertConversion.name || '',
@@ -209,7 +250,7 @@ export class DatabaseStorage implements IStorage {
         createdAt: new Date()
       };
       
-      console.log('Returning temporary conversion to prevent crash. Check DATABASE_URL configuration.');
+      console.log('Storage - returning mock conversion to prevent crash');
       return mockConversion;
     }
   }
