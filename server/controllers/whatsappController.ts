@@ -1,98 +1,148 @@
 import type { Request, Response } from "express";
 import { storage } from "../storage";
-import { whatsappConversionSchema } from "@shared/validation";
-import { ApiResponse, WhatsAppConversion } from "@shared/types";
-import { HTTP_STATUS } from "@shared/constants";
+import { ApiResponse } from "@shared/types";
+import { InsertWhatsappConversion } from "@shared/schema";
 import { WhatsAppService } from "../services/whatsappService";
-import { z } from "zod";
-import { log } from "../vite"; // ✅ Caminho corrigido
 
 export class WhatsAppController {
   static async createConversion(req: Request, res: Response) {
     try {
-      const validatedData = whatsappConversionSchema.parse(req.body);
-
-      const isValidName = validatedData.name && validatedData.name.trim() !== "";
-      const isValidButton = validatedData.buttonType && validatedData.buttonType.trim() !== "";
-
-      if (!isValidName || !isValidButton) {
-        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+      console.log('WhatsAppController - Request body received:', req.body);
+      
+      const { buttonType, name, phone, email, planName, doctorName } = req.body;
+      
+      // Validar buttonType obrigatório
+      if (!buttonType) {
+        console.error('Missing buttonType in request');
+        const response: ApiResponse = {
           success: false,
-          error: "Campos obrigatórios ausentes ou vazios: 'name' e 'buttonType'",
-        });
+          error: "Campo buttonType é obrigatório"
+        };
+        return res.status(400).json(response);
       }
-
-      const conversionData: WhatsAppConversion = {
-        ...validatedData,
-        ipAddress: req.ip || req.connection.remoteAddress || "unknown",
-        userAgent: req.get("User-Agent") || "Unknown",
+      
+      const conversionData: InsertWhatsappConversion = {
+        buttonType,
+        name: name || '',
+        phone: phone || '',
+        email: email || '',
+        planName: planName || null,
+        doctorName: doctorName || null
       };
 
+      console.log('WhatsAppController - Conversion data prepared:', conversionData);
       const conversion = await WhatsAppService.createConversion(conversionData);
-      const userAgent = req.get("User-Agent") || "";
-      const whatsappUrl = WhatsAppService.generateWhatsAppUrl(conversion, userAgent);
-
+      
       const response: ApiResponse = {
         success: true,
-        data: { conversion, whatsappUrl },
+        data: conversion
       };
-
-      log(`✅ Conversão registrada: ${conversion.name} - ${conversion.buttonType}`, "WhatsAppController");
+      
+      console.log('WhatsAppController - Success response:', response);
       res.json(response);
     } catch (error) {
       console.error("[WhatsAppController] Error creating conversion:", error);
-
-      if (error instanceof z.ZodError) {
-        return res.status(HTTP_STATUS.BAD_REQUEST).json({
-          success: false,
-          error: "Dados inválidos fornecidos",
-          message: error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", "),
-        });
-      }
-
-      res.status(500).json({
+      
+      const response: ApiResponse = {
         success: false,
-        error: "Erro ao processar solicitação",
-      });
+        error: "Erro ao criar conversão"
+      };
+      
+      res.status(500).json(response);
     }
   }
 
   static async getConversions(req: Request, res: Response) {
     try {
-      const conversions = await storage.getAllWhatsappConversions();
+      const { startDate, endDate, type } = req.query;
+      
+      let conversions;
+      
+      if (startDate && endDate) {
+        conversions = await storage.getWhatsappConversionsByDateRange(
+          new Date(startDate as string),
+          new Date(endDate as string)
+        );
+      } else {
+        conversions = await storage.getAllWhatsappConversions();
+      }
+      
+      if (type && typeof type === 'string') {
+        conversions = conversions.filter(c => c.buttonType === type);
+      }
 
       const response: ApiResponse = {
         success: true,
-        data: conversions,
+        data: conversions
       };
-
+      
       res.json(response);
     } catch (error) {
-      console.error("[WhatsAppController] Erro ao buscar conversões:", error);
-      res.status(500).json({
+      console.error("[WhatsAppController] Error fetching conversions:", error);
+      
+      const response: ApiResponse = {
         success: false,
-        error: "Erro interno ao buscar conversões",
-      });
+        error: "Erro ao buscar conversões"
+      };
+      
+      res.status(500).json(response);
     }
   }
 
   static async exportConversions(req: Request, res: Response) {
     try {
+      const { format = 'csv', type = 'internal' } = req.query;
+      
       const conversions = await storage.getAllWhatsappConversions();
-
-      const csv = conversions.map(conv =>
-        `"${conv.name}","${conv.email}","${conv.phone}","${conv.buttonType}","${conv.createdAt}"`
-      ).join("\n");
-
-      res.setHeader("Content-disposition", "attachment; filename=conversions.csv");
-      res.setHeader("Content-Type", "text/csv");
-      res.send(csv);
+      
+      if (format === 'csv') {
+        const csv = WhatsAppController.generateCSV(conversions as any[], type as string);
+        
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="conversions-${Date.now()}.csv"`);
+        res.send(csv);
+      } else {
+        const response: ApiResponse = {
+          success: true,
+          data: conversions
+        };
+        res.json(response);
+      }
     } catch (error) {
-      console.error("[WhatsAppController] Erro ao exportar conversões:", error);
-      res.status(500).json({
+      console.error("[WhatsAppController] Error exporting conversions:", error);
+      
+      const response: ApiResponse = {
         success: false,
-        error: "Erro interno ao exportar conversões",
-      });
+        error: "Erro ao exportar conversões"
+      };
+      
+      res.status(500).json(response);
+    }
+  }
+
+  private static generateCSV(conversions: any[], type: string): string {
+    if (type === 'marketing') {
+      const headers = 'Email,Phone,First_Name,Last_Name,Interest_Category,Campaign_Type,Date\n';
+      const rows = conversions.map(c => {
+        const nameParts = (c.name || '').split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        const phone = (c.phone || '').replace(/\D/g, '');
+        const category = c.buttonType === 'plan_subscription' ? 'Health Plan' :
+                        c.buttonType === 'doctor_appointment' ? 'Medical Consultation' :
+                        'Enterprise Quote';
+        
+        return `"${c.email || ''}","${phone}","${firstName}","${lastName}","${category}","${c.buttonType}","${c.createdAt}"`;
+      }).join('\n');
+      
+      return headers + rows;
+    } else {
+      const headers = 'ID,Nome,Email,Telefone,Tipo,Plano,Médico,Data\n';
+      const rows = conversions.map(c => 
+        `${c.id},"${c.name || ''}","${c.email || ''}","${c.phone || ''}","${c.buttonType}","${c.planName || ''}","${c.doctorName || ''}","${c.createdAt}"`
+      ).join('\n');
+      
+      return headers + rows;
     }
   }
 }
