@@ -15,43 +15,33 @@ const JWT_SECRET = process.env.JWT_SECRET || "your-super-secure-secret-key-chang
 
 // Rate limiting configurations
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: { success: false, error: "Muitas tentativas. Tente novamente em 15 minutos." },
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { success: false, error: "Muitas tentativas. Tente novamente em 15 minutos." }
 });
 
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // limit each IP to 50 API requests per windowMs
-  message: { success: false, error: "Limite de API excedido. Tente novamente em 15 minutos." },
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  message: { success: false, error: "Limite de API excedido. Tente novamente em 15 minutos." }
 });
 
 const adminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // limit each IP to 20 admin requests per windowMs
-  message: { success: false, error: "Limite administrativo excedido. Tente novamente em 15 minutos." },
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { success: false, error: "Limite administrativo excedido. Tente novamente em 15 minutos." }
 });
 
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 login attempts per windowMs
-  message: { success: false, error: "Muitas tentativas de login. Tente novamente em 15 minutos." },
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: false, error: "Muitas tentativas de login. Tente novamente em 15 minutos." }
 });
 
 const whatsappLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 10, // limit each IP to 10 WhatsApp requests per 5 minutes
-  message: { success: false, error: "Limite de solicitações WhatsApp excedido. Tente novamente em 5 minutos." },
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  message: { success: false, error: "Limite de solicitações WhatsApp excedido. Tente novamente em 5 minutos." }
 });
 
 // Validation middleware
@@ -88,7 +78,6 @@ const authenticateAdmin = async (req: Request, res: Response, next: NextFunction
       throw new UnauthorizedError("Token expirado");
     }
 
-    // Add user info to request
     (req as any).admin = {
       id: decoded.id,
       username: decoded.username
@@ -209,6 +198,8 @@ export function createAppServer() {
     validateRequest,
     SubscriptionController.createSubscription
   );
+  
+  apiRouter.get('/subscriptions/:id', SubscriptionController.getSubscriptionById);
 
   // Admin routes with authentication and additional rate limiting
   const adminRouter = express.Router();
