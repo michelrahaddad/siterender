@@ -1,19 +1,19 @@
 import type { Request, Response } from "express";
 import { storage } from "../storage";
-import { ApiResponse } from "@shared/types";
-import { InsertWhatsappConversion } from "@shared/schema";
+import { whatsappConversionSchema } from "@shared/validation";
+import { ApiResponse, WhatsAppConversion } from "@shared/types";
+import { HTTP_STATUS } from "@shared/constants";
 import { WhatsAppService } from "../services/whatsappService";
+import { z } from "zod";
 
 export class WhatsAppController {
   static async createConversion(req: Request, res: Response) {
     try {
-      console.log('WhatsAppController - Request body received:', req.body);
+      console.log('WhatsApp Controller - received data:', req.body);
       
       const { buttonType, name, phone, email, planName, doctorName } = req.body;
       
-      // Validar buttonType obrigatório
       if (!buttonType) {
-        console.error('Missing buttonType in request');
         const response: ApiResponse = {
           success: false,
           error: "Campo buttonType é obrigatório"
@@ -21,7 +21,7 @@ export class WhatsAppController {
         return res.status(400).json(response);
       }
       
-      const conversionData: InsertWhatsappConversion = {
+      const conversionData = {
         buttonType,
         name: name || '',
         phone: phone || '',
@@ -30,15 +30,13 @@ export class WhatsAppController {
         doctorName: doctorName || null
       };
 
-      console.log('WhatsAppController - Conversion data prepared:', conversionData);
-      const conversion = await WhatsAppService.createConversion(conversionData);
+      const conversion = await storage.createWhatsappConversion(conversionData);
       
       const response: ApiResponse = {
         success: true,
         data: conversion
       };
       
-      console.log('WhatsAppController - Success response:', response);
       res.json(response);
     } catch (error) {
       console.error("[WhatsAppController] Error creating conversion:", error);
@@ -67,6 +65,7 @@ export class WhatsAppController {
         conversions = await storage.getAllWhatsappConversions();
       }
       
+      // Filter by type if provided
       if (type && typeof type === 'string') {
         conversions = conversions.filter(c => c.buttonType === type);
       }
@@ -120,8 +119,9 @@ export class WhatsAppController {
     }
   }
 
-  private static generateCSV(conversions: any[], type: string): string {
+  private static generateCSV(conversions: WhatsAppConversion[], type: string): string {
     if (type === 'marketing') {
+      // Format for marketing campaigns (Google Ads, Facebook Ads)
       const headers = 'Email,Phone,First_Name,Last_Name,Interest_Category,Campaign_Type,Date\n';
       const rows = conversions.map(c => {
         const nameParts = (c.name || '').split(' ');
@@ -137,9 +137,10 @@ export class WhatsAppController {
       
       return headers + rows;
     } else {
-      const headers = 'ID,Nome,Email,Telefone,Tipo,Plano,Médico,Data\n';
+      // Internal management format
+      const headers = 'ID,Nome,Email,Telefone,Tipo,Plano,Médico,IP,Data\n';
       const rows = conversions.map(c => 
-        `${c.id},"${c.name || ''}","${c.email || ''}","${c.phone || ''}","${c.buttonType}","${c.planName || ''}","${c.doctorName || ''}","${c.createdAt}"`
+        `${c.id},"${c.name || ''}","${c.email || ''}","${c.phone || ''}","${c.buttonType}","${c.planName || ''}","${c.doctorName || ''}","${c.ipAddress || ''}","${c.createdAt}"`
       ).join('\n');
       
       return headers + rows;
