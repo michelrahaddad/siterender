@@ -125,10 +125,16 @@ export function createAppServer() {
     crossOriginEmbedderPolicy: false
   }));
 
-  // CORS with production-safe origins
+  // CORS with production-safe origins including custom domain
   const corsOptions = {
     origin: process.env.NODE_ENV === "production" 
-      ? [/\.render\.com$/, /\.onrender\.com$/]
+      ? [
+          /\.render\.com$/, 
+          /\.onrender\.com$/,
+          'https://cartaomaisvidah.com.br',
+          'https://www.cartaomaisvidah.com.br',
+          'https://cartaovidah.com.br'
+        ]
       : true,
     credentials: true,
     optionsSuccessStatus: 200
@@ -148,109 +154,105 @@ export function createAppServer() {
   // Apply general rate limiting to all requests
   app.use(generalLimiter);
 
-  // Apply API rate limiting to API routes
-  app.use("/api", apiLimiter);
+  // Health check endpoints
+  app.get(['/health', '/ready', '/_health'], (req: Request, res: Response) => {
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      version: process.version
+    });
+  });
 
-  // WhatsApp tracking route (no validation middleware)
-  app.post("/track-whatsapp",
+  app.get('/metrics', (req: Request, res: Response) => {
+    res.status(200).json({
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      cpu: process.cpuUsage(),
+      version: process.version,
+      environment: process.env.NODE_ENV || 'development'
+    });
+  });
+
+  // WhatsApp conversion tracking endpoint (before API middleware)
+  app.post('/track-whatsapp', 
     whatsappLimiter,
     [
-      body('buttonType')
-        .isIn(['plan_subscription', 'doctor_appointment', 'enterprise_quote'])
-        .withMessage('Tipo de botão inválido'),
-      body('name')
-        .optional()
-        .isLength({ min: 2, max: 100 })
-        .trim()
-        .matches(/^[a-zA-ZÀ-ÿ\s]+$/)
-        .withMessage('Nome deve conter apenas letras e espaços'),
-      body('phone')
-        .optional({ nullable: true, checkFalsy: true }),
-      body('email')
-        .optional()
-        .isEmail()
-        .normalizeEmail()
-        .withMessage('Email inválido'),
-      body('planName')
-        .optional()
-        .isLength({ max: 100 })
-        .trim(),
-      body('doctorName')
-        .optional()
-        .isLength({ max: 100 })
-        .trim()
+      body('buttonType').isString().withMessage('buttonType é obrigatório'),
+      body('name').optional().isString().withMessage('Nome deve ser uma string'),
+      body('email').optional().isEmail().withMessage('Email deve ser válido'),
+      body('phone').optional().isString().withMessage('Telefone deve ser uma string'),
+      body('planName').optional().isString().withMessage('Nome do plano deve ser uma string'),
+      body('doctorName').optional().isString().withMessage('Nome do médico deve ser uma string')
     ],
     validateRequest,
     WhatsAppController.createConversion
   );
 
-  app.post("/api/whatsapp/conversions",
-    whatsappLimiter,
+  // API routes with rate limiting
+  const apiRouter = express.Router();
+  apiRouter.use(apiLimiter);
+
+  // Plan routes
+  apiRouter.get('/plans', PlanController.getAllPlans);
+  apiRouter.get('/plans/:id', PlanController.getPlanById);
+
+  // Subscription routes
+  apiRouter.post('/subscriptions', 
     [
-      body('buttonType')
-        .isIn(['plan_subscription', 'doctor_appointment', 'enterprise_quote'])
-        .withMessage('Tipo de botão inválido'),
-      body('name')
-        .optional()
-        .isLength({ min: 2, max: 100 })
-        .trim()
-        .matches(/^[a-zA-ZÀ-ÿ\s]+$/)
-        .withMessage('Nome deve conter apenas letras e espaços'),
-      body('phone')
-        .optional({ nullable: true, checkFalsy: true }),
-      body('email')
-        .optional()
-        .isEmail()
-        .normalizeEmail()
-        .withMessage('Email inválido'),
-      body('planName')
-        .optional()
-        .isLength({ max: 100 })
-        .trim(),
-      body('doctorName')
-        .optional()
-        .isLength({ max: 100 })
-        .trim()
+      body('customerId').isInt().withMessage('ID do cliente é obrigatório'),
+      body('planId').isInt().withMessage('ID do plano é obrigatório'),
+      body('paymentMethod').isString().withMessage('Método de pagamento é obrigatório')
     ],
     validateRequest,
-    WhatsAppController.createConversion
+    SubscriptionController.createSubscription
   );
 
-  // Admin routes
-  app.post("/api/admin/login",
+  // Admin routes with authentication and additional rate limiting
+  const adminRouter = express.Router();
+  adminRouter.use(adminLimiter);
+
+  // Admin login (no auth required for login itself)
+  adminRouter.post('/login',
     loginLimiter,
+    [
+      body('username').isString().notEmpty().withMessage('Usuário é obrigatório'),
+      body('password').isString().isLength({ min: 6 }).withMessage('Senha deve ter pelo menos 6 caracteres')
+    ],
+    validateRequest,
     AdminController.login
   );
 
-  app.get("/api/admin/verify", AdminController.verifyToken);
-
   // Protected admin routes
-  app.use("/api/admin", adminLimiter);
-  app.use("/api/admin", authenticateAdmin);
+  adminRouter.get('/conversions', authenticateAdmin, AdminController.getConversions);
+  adminRouter.get('/conversions/export', authenticateAdmin, AdminController.exportConversions);
+  adminRouter.get('/dashboard', authenticateAdmin, AdminController.getDashboard);
 
-  app.get("/api/admin/dashboard/stats", AdminController.getDashboardStats);
-  app.get("/api/admin/conversions", WhatsAppController.getConversions);
-  app.get("/api/admin/conversions/export", WhatsAppController.exportConversions);
+  // Mount routers
+  app.use('/api', apiRouter);
+  app.use('/admin', adminRouter);
 
-  // Health check routes
-  app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
-
-  app.get('/ready', (req, res) => {
-    res.json({ status: 'ready', timestamp: new Date().toISOString() });
-  });
-
-  app.get('/_health', (req, res) => {
-    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-  });
-
-  app.get('/metrics', (req, res) => {
-    res.json({ 
-      status: 'ok',
-      uptime: process.uptime(),
-      timestamp: new Date().toISOString()
+  // Global error handler
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    console.error('Global error handler:', {
+      error: err.message,
+      stack: err.stack,
+      url: req.url,
+      method: req.method,
+      ip: req.ip,
+      userAgent: req.get('User-Agent')
     });
+
+    const response: ApiResponse = {
+      success: false,
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Erro interno do servidor' 
+        : err.message
+    };
+
+    res.status(err.status || 500).json(response);
   });
 
   return app;
