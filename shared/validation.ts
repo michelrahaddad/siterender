@@ -33,7 +33,7 @@ export function isValidPhone(phone: string): boolean {
   return clean[2] !== '9';
 }
 
-// Schemas
+// Basic field schemas
 export const emailSchema = z.string().email("Email inválido").min(1);
 export const cpfSchema = z.string().min(11).max(14).refine(isValidCPF, "CPF inválido");
 export const phoneSchema = z.string()
@@ -48,7 +48,7 @@ export const nameSchema = z.string()
   .max(100)
   .regex(/^[a-zA-ZÀ-ÿ\s]+$/, "Nome deve conter apenas letras e espaços");
 
-// Conversão WhatsApp - Corrigido
+// Schema para conversão WhatsApp
 export const whatsappConversionSchema = z.object({
   name: nameSchema,
   buttonType: z.enum(['plan_subscription', 'doctor_appointment', 'enterprise_quote'], {
@@ -59,3 +59,16 @@ export const whatsappConversionSchema = z.object({
   planName: z.string().optional(),
   doctorName: z.string().optional(),
 });
+
+// ✅ Adicionado para corrigir os imports do Render
+export const subscriptionRequestSchema = z.object({
+  customer: insertCustomerSchema,
+  subscription: insertSubscriptionSchema,
+  digitalCard: insertDigitalCardSchema.optional(),
+});
+
+export const adminLoginSchema = z.object({
+  email: emailSchema,
+  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+});
+
