@@ -1,5 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from "express";
-import { createServer } from "http";
+import helmet from "helmet";
+import cors from "cors";
+import compression from "compression";
 import rateLimit from "express-rate-limit";
 import { body, validationResult } from "express-validator";
 import jwt from "jsonwebtoken";
@@ -108,6 +110,41 @@ const authenticateAdmin = async (req: Request, res: Response, next: NextFunction
 export function createAppServer() {
   const app = express();
 
+  // Security headers
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "https:"],
+        scriptSrc: ["'self'"],
+        connectSrc: ["'self'", "wss:", "https:"],
+      },
+    },
+    crossOriginEmbedderPolicy: false
+  }));
+
+  // CORS with production-safe origins
+  const corsOptions = {
+    origin: process.env.NODE_ENV === "production" 
+      ? [/\.render\.com$/, /\.onrender\.com$/]
+      : true,
+    credentials: true,
+    optionsSuccessStatus: 200
+  };
+  app.use(cors(corsOptions));
+
+  // Compression for better performance
+  app.use(compression());
+
+  // Trust proxy for accurate client IPs
+  app.set('trust proxy', 1);
+
+  // Body parsing with security limits
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ extended: false, limit: "10mb" }));
+
   // Apply general rate limiting to all requests
   app.use(generalLimiter);
 
@@ -195,5 +232,26 @@ export function createAppServer() {
   app.get("/api/admin/conversions", WhatsAppController.getConversions);
   app.get("/api/admin/conversions/export", WhatsAppController.exportConversions);
 
-  return createServer(app);
+  // Health check routes
+  app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  app.get('/ready', (req, res) => {
+    res.json({ status: 'ready', timestamp: new Date().toISOString() });
+  });
+
+  app.get('/_health', (req, res) => {
+    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  });
+
+  app.get('/metrics', (req, res) => {
+    res.json({ 
+      status: 'ok',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  return app;
 }
