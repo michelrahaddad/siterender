@@ -45,7 +45,6 @@ export class DatabaseStorage implements IStorage {
       if (existingPlans.length === 0) {
         await db.insert(plans).values([
           {
-            id: 1,
             name: "Cartão Familiar",
             type: "familiar",
             annualPrice: "418.80",
@@ -55,7 +54,6 @@ export class DatabaseStorage implements IStorage {
             isActive: true,
           },
           {
-            id: 2,
             name: "Cartão Corporativo",
             type: "empresarial",
             annualPrice: "0",
@@ -65,6 +63,7 @@ export class DatabaseStorage implements IStorage {
             isActive: true,
           }
         ]);
+        console.log('Plans initialized successfully');
       }
     } catch (error) {
       console.error("Error initializing plans:", error);
@@ -81,12 +80,12 @@ export class DatabaseStorage implements IStorage {
       const existingAdmin = await db.select().from(adminUsers).where(eq(adminUsers.username, 'admin'));
       if (existingAdmin.length === 0) {
         const hashedPassword = await bcrypt.hash('vidah2025', 10);
-        await db.insert(adminUsers).values({
+        await db.insert(adminUsers).values([{
           username: 'admin',
           password: hashedPassword,
           email: 'admin@cartaovidah.com',
           isActive: true
-        });
+        }]);
         console.log('Admin user created successfully');
       } else {
         console.log('Admin user already exists');
@@ -188,8 +187,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAdminByUsername(username: string): Promise<AdminUser | undefined> {
-    const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.username, username));
-    return admin;
+    try {
+      const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.username, username));
+      return admin;
+    } catch (error) {
+      console.error("Error getting admin by username:", error);
+      return undefined;
+    }
   }
 
   async verifyAdminPassword(username: string, password: string): Promise<boolean> {
@@ -256,20 +260,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllWhatsappConversions(): Promise<WhatsappConversion[]> {
-    return await db.select().from(whatsappConversions).orderBy(whatsappConversions.createdAt);
+    try {
+      return await db.select().from(whatsappConversions).orderBy(whatsappConversions.createdAt);
+    } catch (error) {
+      console.error("Error getting WhatsApp conversions:", error);
+      return [];
+    }
   }
 
   async getWhatsappConversionsByDateRange(startDate: Date, endDate: Date): Promise<WhatsappConversion[]> {
-    return await db
-      .select()
-      .from(whatsappConversions)
-      .where(
-        and(
-          gte(whatsappConversions.createdAt, startDate),
-          lte(whatsappConversions.createdAt, endDate)
+    try {
+      return await db
+        .select()
+        .from(whatsappConversions)
+        .where(
+          and(
+            gte(whatsappConversions.createdAt, startDate),
+            lte(whatsappConversions.createdAt, endDate)
+          )
         )
-      )
-      .orderBy(whatsappConversions.createdAt);
+        .orderBy(whatsappConversions.createdAt);
+    } catch (error) {
+      console.error("Error getting WhatsApp conversions by date range:", error);
+      return [];
+    }
   }
 }
 
