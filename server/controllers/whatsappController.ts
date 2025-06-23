@@ -51,4 +51,43 @@ export class WhatsAppController {
       });
     }
   }
+
+  static async getConversions(req: Request, res: Response) {
+    try {
+      const conversions = await storage.getAllWhatsappConversions();
+
+      const response: ApiResponse = {
+        success: true,
+        data: conversions,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("[WhatsAppController] Erro ao buscar conversões:", error);
+      res.status(500).json({
+        success: false,
+        error: "Erro interno ao buscar conversões"
+      });
+    }
+  }
+
+  static async exportConversions(req: Request, res: Response) {
+    try {
+      const conversions = await storage.getAllWhatsappConversions();
+
+      const csv = conversions.map(conv => 
+        `"${conv.name}","${conv.email}","${conv.phone}","${conv.buttonType}","${conv.createdAt}"`
+      ).join('\n');
+
+      res.setHeader("Content-disposition", "attachment; filename=conversions.csv");
+      res.setHeader("Content-Type", "text/csv");
+      res.send(csv);
+    } catch (error) {
+      console.error("[WhatsAppController] Erro ao exportar conversões:", error);
+      res.status(500).json({
+        success: false,
+        error: "Erro interno ao exportar conversões"
+      });
+    }
+  }
 }
