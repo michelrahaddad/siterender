@@ -47,6 +47,7 @@ export class DatabaseStorage implements IStorage {
     try {
       await this.ensureAdminTable();
       await this.ensurePlansTable();
+      await this.ensureWhatsappTable();
       await this.initializeAdmin();
       await this.initializePlans();
     } catch (error) {
@@ -94,6 +95,26 @@ export class DatabaseStorage implements IStorage {
       console.log('plans table updated successfully');
     } catch (error) {
       console.error('Error ensuring plans table:', error);
+    }
+  }
+
+  private async ensureWhatsappTable() {
+    try {
+      console.log('Ensuring whatsapp_conversions table has required columns...');
+      
+      // Add missing columns if they don't exist
+      await pool.query(`
+        ALTER TABLE whatsapp_conversions 
+        ADD COLUMN IF NOT EXISTS button_type TEXT NOT NULL DEFAULT 'plan_subscription',
+        ADD COLUMN IF NOT EXISTS plan_name TEXT,
+        ADD COLUMN IF NOT EXISTS doctor_name TEXT,
+        ADD COLUMN IF NOT EXISTS ip_address TEXT,
+        ADD COLUMN IF NOT EXISTS user_agent TEXT
+      `);
+      
+      console.log('whatsapp_conversions table updated successfully');
+    } catch (error) {
+      console.error('Error ensuring whatsapp table:', error);
     }
   }
 
@@ -335,10 +356,35 @@ export class DatabaseStorage implements IStorage {
         throw new Error('Database not configured');
       }
       
-      const [conversion] = await db
-        .insert(whatsappConversions)
-        .values(insertConversion)
-        .returning();
+      // Use direct PostgreSQL query to avoid Drizzle schema conflicts
+      const result = await pool.query(`
+        INSERT INTO whatsapp_conversions (name, phone, email, button_type, plan_name, doctor_name, ip_address, user_agent, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        RETURNING *
+      `, [
+        insertConversion.name || '',
+        insertConversion.phone || '',
+        insertConversion.email || '',
+        insertConversion.buttonType,
+        insertConversion.planName || null,
+        insertConversion.doctorName || null,
+        insertConversion.ipAddress || null,
+        insertConversion.userAgent || null
+      ]);
+      
+      const row = result.rows[0];
+      const conversion: WhatsappConversion = {
+        id: row.id,
+        name: row.name,
+        phone: row.phone,
+        email: row.email,
+        buttonType: row.button_type,
+        planName: row.plan_name,
+        doctorName: row.doctor_name,
+        ipAddress: row.ip_address,
+        userAgent: row.user_agent,
+        createdAt: row.created_at
+      };
       
       console.log('Storage - conversion saved successfully');
       return conversion;
@@ -366,7 +412,25 @@ export class DatabaseStorage implements IStorage {
 
   async getAllWhatsappConversions(): Promise<WhatsappConversion[]> {
     try {
-      return await db.select().from(whatsappConversions).orderBy(whatsappConversions.createdAt);
+      // Use direct PostgreSQL query to avoid Drizzle schema conflicts
+      const result = await pool.query(`
+        SELECT id, name, phone, email, button_type, plan_name, doctor_name, ip_address, user_agent, created_at
+        FROM whatsapp_conversions 
+        ORDER BY created_at DESC
+      `);
+      
+      return result.rows.map(row => ({
+        id: row.id,
+        name: row.name || '',
+        phone: row.phone || '',
+        email: row.email || '',
+        buttonType: row.button_type,
+        planName: row.plan_name,
+        doctorName: row.doctor_name,
+        ipAddress: row.ip_address,
+        userAgent: row.user_agent,
+        createdAt: row.created_at
+      }));
     } catch (error) {
       console.error("Error getting WhatsApp conversions:", error);
       return [];
@@ -375,16 +439,26 @@ export class DatabaseStorage implements IStorage {
 
   async getWhatsappConversionsByDateRange(startDate: Date, endDate: Date): Promise<WhatsappConversion[]> {
     try {
-      return await db
-        .select()
-        .from(whatsappConversions)
-        .where(
-          and(
-            gte(whatsappConversions.createdAt, startDate),
-            lte(whatsappConversions.createdAt, endDate)
-          )
-        )
-        .orderBy(whatsappConversions.createdAt);
+      // Use direct PostgreSQL query to avoid Drizzle schema conflicts
+      const result = await pool.query(`
+        SELECT id, name, phone, email, button_type, plan_name, doctor_name, ip_address, user_agent, created_at
+        FROM whatsapp_conversions 
+        WHERE created_at >= $1 AND created_at <= $2
+        ORDER BY created_at DESC
+      `, [startDate, endDate]);
+      
+      return result.rows.map(row => ({
+        id: row.id,
+        name: row.name || '',
+        phone: row.phone || '',
+        email: row.email || '',
+        buttonType: row.button_type,
+        planName: row.plan_name,
+        doctorName: row.doctor_name,
+        ipAddress: row.ip_address,
+        userAgent: row.user_agent,
+        createdAt: row.created_at
+      }));
     } catch (error) {
       console.error("Error getting WhatsApp conversions by date range:", error);
       return [];
