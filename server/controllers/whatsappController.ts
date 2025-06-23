@@ -11,21 +11,25 @@ export class WhatsAppController {
     try {
       const validatedData = whatsappConversionSchema.parse(req.body);
 
-      if (!validatedData.name || !validatedData.buttonType) {
-        return res.status(400).json({
+      // ✅ Validação aprimorada: campos não podem ser vazios ou ausentes
+      const isValidName = validatedData.name && validatedData.name.trim() !== "";
+      const isValidButton = validatedData.buttonType && validatedData.buttonType.trim() !== "";
+
+      if (!isValidName || !isValidButton) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
           success: false,
-          error: "Campos obrigatórios ausentes: 'name' e 'buttonType'"
+          error: "Campos obrigatórios ausentes ou vazios: 'name' e 'buttonType'"
         });
       }
 
       const conversionData: WhatsAppConversion = {
         ...validatedData,
-        ipAddress: req.ip || req.connection.remoteAddress,
-        userAgent: req.get('User-Agent') || 'Unknown',
+        ipAddress: req.ip || req.connection.remoteAddress || "unknown",
+        userAgent: req.get("User-Agent") || "Unknown"
       };
 
       const conversion = await WhatsAppService.createConversion(conversionData);
-      const userAgent = req.get('User-Agent') || '';
+      const userAgent = req.get("User-Agent") || "";
       const whatsappUrl = WhatsAppService.generateWhatsAppUrl(conversion, userAgent);
 
       const response: ApiResponse = {
@@ -41,7 +45,7 @@ export class WhatsAppController {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
           success: false,
           error: "Dados inválidos fornecidos",
-          message: error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
+          message: error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", ")
         });
       }
 
@@ -58,7 +62,7 @@ export class WhatsAppController {
 
       const response: ApiResponse = {
         success: true,
-        data: conversions,
+        data: conversions
       };
 
       res.json(response);
@@ -75,9 +79,9 @@ export class WhatsAppController {
     try {
       const conversions = await storage.getAllWhatsappConversions();
 
-      const csv = conversions.map(conv => 
+      const csv = conversions.map(conv =>
         `"${conv.name}","${conv.email}","${conv.phone}","${conv.buttonType}","${conv.createdAt}"`
-      ).join('\n');
+      ).join("\n");
 
       res.setHeader("Content-disposition", "attachment; filename=conversions.csv");
       res.setHeader("Content-Type", "text/csv");
