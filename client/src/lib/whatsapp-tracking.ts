@@ -2,8 +2,9 @@ export interface TrackingData {
   buttonType: 'plan_subscription' | 'doctor_appointment' | 'enterprise_quote';
   planName?: string;
   doctorName?: string;
-  name?: string;
+  name: string; // ← obrigatório
   phone?: string;
+  email?: string; // ← opcional, caso deseje enviar também
 }
 
 export const trackWhatsAppConversion = async (data: TrackingData) => {
