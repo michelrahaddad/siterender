@@ -4,14 +4,17 @@ import { openWhatsApp } from "@/lib/device-detection";
 
 export default function WhatsAppFloat() {
   const handleWhatsAppClick = () => {
-    // Track general inquiry conversion
+    // Envia conversão com os campos obrigatórios
     trackWhatsAppConversion({
-      buttonType: 'plan_subscription',
-      planName: 'Consulta Geral'
+      name: "Usuário Site", // Nome genérico (ou real se tiver)
+      phone: "", // Opcional - preencha se tiver
+      email: "", // Opcional - preencha se quiser
+      buttonType: "plan_subscription",
+      planName: "Consulta Geral"
     });
 
     const message = "Olá! Gostaria de saber mais sobre o Cartão + Vidah";
-    openWhatsApp('5516993247676', message);
+    openWhatsApp("5516993247676", message);
   };
 
   return (
@@ -23,7 +26,7 @@ export default function WhatsAppFloat() {
       >
         <MessageCircle size={28} className="group-hover:scale-110 transition-transform" />
       </button>
-      
+
       {/* Tooltip */}
       <div className="absolute bottom-16 right-0 bg-black text-white text-sm px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap pointer-events-none">
         Fale conosco no WhatsApp
