@@ -43,26 +43,17 @@ export class DatabaseStorage implements IStorage {
 
   private async initializePlans() {
     try {
-      const existingPlans = await db.select().from(plans);
-      if (existingPlans.length === 0) {
-        await db.insert(plans).values([
-          {
-            name: "Cartão Familiar",
-            type: "familiar",
-            annualPrice: "418.80",
-            monthlyPrice: "34.90",
-            adhesionFee: "0",
-            maxDependents: 4
-          },
-          {
-            name: "Cartão Corporativo", 
-            type: "empresarial",
-            annualPrice: "0",
-            monthlyPrice: "0",
-            adhesionFee: "0",
-            maxDependents: 0
-          }
-        ]);
+      // Use direct SQL to avoid column existence issues
+      const planCheck = await pool.query('SELECT COUNT(*) as count FROM plans');
+      const planCount = parseInt(planCheck.rows[0].count);
+      
+      if (planCount === 0) {
+        await pool.query(`
+          INSERT INTO plans (name, type, annual_price, monthly_price, adhesion_fee, max_dependents, is_active, created_at)
+          VALUES 
+            ('Cartão Familiar', 'familiar', 418.80, 34.90, 0, 4, true, NOW()),
+            ('Cartão Corporativo', 'empresarial', 0, 0, 0, 0, true, NOW())
+        `);
         console.log('Plans initialized successfully');
       }
     } catch (error) {
@@ -79,7 +70,19 @@ export class DatabaseStorage implements IStorage {
       
       console.log('Checking for existing admin user...');
       
-      // Use direct PostgreSQL query to avoid all Drizzle issues
+      // Create admin_users table if it doesn't exist
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS admin_users (
+          id SERIAL PRIMARY KEY,
+          username TEXT NOT NULL UNIQUE,
+          password TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT NOW() NOT NULL
+        )
+      `);
+      
+      // Check if admin exists
       const checkResult = await pool.query('SELECT COUNT(*) as count FROM admin_users WHERE username = $1', ['admin']);
       const adminCount = parseInt(checkResult.rows[0].count);
       
@@ -89,19 +92,18 @@ export class DatabaseStorage implements IStorage {
         console.log('Creating admin user...');
         const hashedPassword = await bcrypt.hash('vidah2025', 10);
         
-        // Direct PostgreSQL insert - 100% compatible
+        // Direct PostgreSQL insert
         await pool.query(
           'INSERT INTO admin_users (username, password, email, is_active, created_at) VALUES ($1, $2, $3, $4, NOW())',
           ['admin', hashedPassword, 'admin@cartaovidah.com', true]
         );
         
-        console.log('Admin user created successfully via direct PostgreSQL');
+        console.log('Admin user created successfully');
       } else {
         console.log('Admin user already exists');
       }
     } catch (error) {
       console.error("Error initializing admin:", error);
-      // Don't crash the app if admin creation fails
     }
   }
 
@@ -143,7 +145,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllPlans(): Promise<Plan[]> {
-    return await db.select().from(plans);
+    try {
+      return await db.select().from(plans);
+    } catch (error) {
+      // Fallback to direct SQL if Drizzle fails
+      const result = await pool.query('SELECT * FROM plans');
+      return result.rows;
+    }
   }
 
   async getPlanById(id: number): Promise<Plan | undefined> {
@@ -197,7 +205,7 @@ export class DatabaseStorage implements IStorage {
 
   async getAdminByUsername(username: string): Promise<AdminUser | undefined> {
     try {
-      // Use direct PostgreSQL query to avoid Drizzle schema conflicts
+      // Use direct PostgreSQL query to avoid schema conflicts
       const result = await pool.query(
         'SELECT id, username, password, email, is_active, created_at FROM admin_users WHERE username = $1',
         [username]
