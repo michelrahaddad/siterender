@@ -5,14 +5,13 @@ import { ApiResponse, WhatsAppConversion } from "@shared/types";
 import { HTTP_STATUS } from "@shared/constants";
 import { WhatsAppService } from "../services/whatsappService";
 import { z } from "zod";
-import { log } from "../utils/vite"; // ✅ Caminho corrigido
+import { log } from "../core/vite"; // ✅ Caminho corrigido
 
 export class WhatsAppController {
   static async createConversion(req: Request, res: Response) {
     try {
       const validatedData = whatsappConversionSchema.parse(req.body);
 
-      // ✅ Validação aprimorada
       const isValidName = validatedData.name && validatedData.name.trim() !== "";
       const isValidButton = validatedData.buttonType && validatedData.buttonType.trim() !== "";
 
@@ -38,7 +37,7 @@ export class WhatsAppController {
         data: { conversion, whatsappUrl },
       };
 
-      log(`Conversão registrada com sucesso: ${validatedData.buttonType} - ${validatedData.name}`, "WhatsAppController");
+      log(`✅ Conversão registrada: ${conversion.name} - ${conversion.buttonType}`, "WhatsAppController");
       res.json(response);
     } catch (error) {
       console.error("[WhatsAppController] Error creating conversion:", error);
