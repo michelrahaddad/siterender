@@ -210,7 +210,7 @@ export function createAppServer() {
     loginLimiter,
     [
       body('username').isString().notEmpty().withMessage('Usuário é obrigatório'),
-      body('password').isString().isLength({ min: 6 }).withMessage('Senha deve ter pelo menos 6 caracteres')
+      body('password').isString().isLength({ min: 1 }).withMessage('Senha é obrigatória')
     ],
     validateRequest,
     AdminController.login
@@ -223,7 +223,7 @@ export function createAppServer() {
 
   // Mount routers
   app.use('/api', apiRouter);
-  app.use('/admin', adminRouter);
+  app.use('/api/admin', adminRouter);
 
   // Global error handler
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
