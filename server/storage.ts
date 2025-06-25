@@ -88,7 +88,9 @@ export class DatabaseStorage implements IStorage {
           'INSERT INTO admin_users (username, password, email, is_active, created_at) VALUES ($1, $2, $3, $4, NOW())',
           ['admin', hashedPassword, 'admin@cartaovidah.com', true]
         );
-        console.log('Admin user created successfully');
+        console.log('Admin user created successfully with username: admin, password: vidah2025');
+      } else {
+        console.log('Admin user already exists');
       }
 
       // Initialize plans if not exists
@@ -249,21 +251,32 @@ export class DatabaseStorage implements IStorage {
 
   async verifyAdminPassword(username: string, password: string): Promise<boolean> {
     try {
+      console.log('=== VERIFY ADMIN PASSWORD ===');
+      console.log('Username:', username);
+      console.log('Password provided:', !!password);
+      console.log('Database URL exists:', !!process.env.DATABASE_URL);
+      
       if (!process.env.DATABASE_URL) {
         console.error('DATABASE_URL not configured');
         return false;
       }
       
       const admin = await this.getAdminByUsername(username);
+      console.log('Admin found in DB:', admin ? 'YES' : 'NO');
+      
       if (!admin) {
         console.log('Admin not found in database');
         return false;
       }
       
+      console.log('Comparing password with hash...');
       const isValid = await bcrypt.compare(password, admin.password);
+      console.log('Password comparison result:', isValid);
+      
       return isValid;
     } catch (error) {
       console.error("Error verifying admin password:", error);
+      console.error("Stack trace:", error.stack);
       return false;
     }
   }
