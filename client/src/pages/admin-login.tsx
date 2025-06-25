@@ -44,14 +44,14 @@ export default function AdminLogin() {
 
       const result = await response.json();
       
-      if (response.ok) {
+      if (response.ok && result.success) {
         // Store the token in localStorage
-        localStorage.setItem("admin_token", result.token);
-        localStorage.setItem("admin_user", JSON.stringify(result.user));
+        localStorage.setItem("admin_token", result.data.token);
+        localStorage.setItem("admin_user", JSON.stringify(result.data.admin));
         
         toast({
           title: "Login realizado com sucesso",
-          description: `Bem-vindo, ${result.user.username}!`,
+          description: `Bem-vindo, ${result.data.admin.username}!`,
         });
         
         // Redirect to admin dashboard
@@ -59,7 +59,7 @@ export default function AdminLogin() {
       } else {
         toast({
           title: "Erro no login",
-          description: result.message || "Credenciais inválidas",
+          description: result.error || "Credenciais inválidas",
           variant: "destructive",
         });
       }
