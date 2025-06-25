@@ -8,23 +8,28 @@ const JWT_SECRET = process.env.JWT_SECRET || "your-super-secure-secret-key-chang
 export class AdminController {
   static async login(req: Request, res: Response) {
     try {
-      console.log('Admin login attempt:', req.body);
+      console.log('=== ADMIN LOGIN ATTEMPT ===');
+      console.log('Request body:', req.body);
+      console.log('Request headers:', req.headers);
+      console.log('Database URL exists:', !!process.env.DATABASE_URL);
       
       const { username, password } = req.body;
       
       if (!username || !password) {
+        console.log('Missing username or password');
         return res.status(400).json({
           success: false,
           error: "Username e password são obrigatórios"
         });
       }
 
-      console.log(`[Security] Login attempt for username: ${username} from IP: ${req.ip}`);
+      console.log(`Attempting login for username: ${username}`);
 
       const isValid = await storage.verifyAdminPassword(username, password);
+      console.log(`Password verification result: ${isValid}`);
       
       if (!isValid) {
-        console.log(`[Security] Failed login attempt for username: ${username} from IP: ${req.ip}`);
+        console.log(`Failed login attempt for username: ${username}`);
         
         return res.status(401).json({
           success: false,
@@ -33,8 +38,10 @@ export class AdminController {
       }
 
       const admin = await storage.getAdminByUsername(username);
+      console.log('Admin found:', admin ? 'YES' : 'NO');
+      
       if (!admin) {
-        console.log(`[Security] Admin not found: ${username}`);
+        console.log(`Admin not found: ${username}`);
         
         return res.status(401).json({
           success: false,
@@ -52,7 +59,7 @@ export class AdminController {
         JWT_SECRET
       );
 
-      console.log(`[Security] Successful login for username: ${username} from IP: ${req.ip}`);
+      console.log(`Successful login for username: ${username}`);
 
       const response: ApiResponse = {
         success: true,
@@ -66,9 +73,11 @@ export class AdminController {
         }
       };
 
+      console.log('Sending successful response');
       res.json(response);
     } catch (error) {
       console.error("[AdminController] Login error:", error);
+      console.error("Stack trace:", error.stack);
       
       const response: ApiResponse = {
         success: false,
