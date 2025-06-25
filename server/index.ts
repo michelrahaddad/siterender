@@ -41,6 +41,11 @@ import { setupVite, serveStatic, log } from "./vite";
 
   const port = process.env.PORT || 5000;
   server.listen(port, "0.0.0.0", () => {
+    console.log(`=== SERVER STARTED ===`);
+    console.log(`Port: ${port}`);
+    console.log(`Environment: ${process.env.NODE_ENV}`);
+    console.log(`Database URL exists: ${!!process.env.DATABASE_URL}`);
+    console.log(`JWT Secret exists: ${!!process.env.JWT_SECRET}`);
     log(`serving on port ${port}`);
   });
 })();
